@@ -1,3 +1,9 @@
+
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h> 
+
 #include<iostream>
 #include<map>
 #include<math.h>
@@ -5,9 +11,10 @@
 #include<string>
 #include<vector>
 #include<sstream>
-#include<windows.h>
 #include<stdio.h>
 #include<glut.h>
+#include <chrono>
+#include <limits>
 
 using namespace std;
 
@@ -207,7 +214,7 @@ void Gridlines() {
 
 void DrawXAxis() {
 	glPushMatrix();
-	glColor3f(0, 0, 1);
+	glColor3f(0, 0, 1); // Blue
 	glRotated(90, 0, 1, 0);
 	GLUquadricObj* xobj = gluNewQuadric();
 	gluCylinder(xobj, 0.1, 0.1, 1.5, 3, 4);
@@ -218,7 +225,7 @@ void DrawXAxis() {
 
 void DrawYAxis() {
 	glPushMatrix();
-	glColor3f(0, 1, 0);
+	glColor3f(0, 1, 0); // Green
 	glRotated(-90, 1, 0, 0);
 	GLUquadricObj* yobj = gluNewQuadric();
 	gluCylinder(yobj, 0.1, 0.1, 1.5, 3, 4);
@@ -229,7 +236,7 @@ void DrawYAxis() {
 
 void DrawZAxis() {
 	glPushMatrix();
-	glColor3f(1, 0, 0);
+	glColor3f(1, 0, 0); // Red
 	GLUquadricObj* zobj = gluNewQuadric();
 	gluCylinder(zobj, 0.1, 0.1, 1.5, 3, 4);
 	glTranslated(0, 0, 1.5);
@@ -341,7 +348,7 @@ void Draw()
 	Axes();
 	Boundingbox();
 
-	if (obj_mode == OBJ_POINTS) {
+	if (obj_mode == 0 || obj_mode == OBJ_POINTS) {
 		DrawModelPoints();
 	}
 	else if (obj_mode == OBJ_WIREFRAME) {
@@ -357,151 +364,78 @@ void Draw()
 	glutSwapBuffers();
 }
 
-vector<string> ReadSelectedModel(char modelname) {
+void BuildFaceHalfEdgeDataStructures(HE_face* &face, map<pair<int, int>, HE_edge*> &edges);
+void CalculateFaceNormal(HE_face* &face);
+
+void ReadModelAndBuildVerticesandFaces() {
 
 	string fileLine;
-	vector<string> fileLines;
-
+	string name;
 	ifstream infile;
 
-	switch (modelname) {
-	case 'B':case 'b':
-		infile.open("bunny.m");
-		if (!infile.is_open()) {
-			cerr << "Error opening file b.m" << endl;
-		}
-		while (getline(infile, fileLine))
-		{
-			fileLines.push_back(fileLine);
-		}
-		infile.close();
-		break;
-	case 'C':case 'c':
-		infile.open("cap.m");
-		while (!infile.eof())
-		{
-			getline(infile, fileLine);
-			fileLines.push_back(fileLine);
-		}
+	map<pair<int, int>, HE_edge*> edges;
 
-		infile.close();
-		break;
-	case 'E':case 'e':
-		infile.open("eight.m");
-		while (!infile.eof())
-		{
-			getline(infile, fileLine);
-			fileLines.push_back(fileLine);
-		}
-
-		infile.close();
-		break;
-	case 'G':case 'g':
-		infile.open("gargoyle.m");
-		while (!infile.eof())
-		{
-			getline(infile, fileLine);
-			fileLines.push_back(fileLine);
-		}
-
-		infile.close();
-		break;
-	case 'K':case 'k':infile.open("knot.m");
-		while (!infile.eof())
-		{
-			getline(infile, fileLine);
-			fileLines.push_back(fileLine);
-		}
-
-		infile.close();
-		break;
+	infile.open("bunny.m");
+	if (!infile.is_open()) {
+		cerr << "Error opening file b.m" << endl;
 	}
 
-	return fileLines;
-}
-
-void BuildVerticesandFaces(vector<string> fileLines) {
-
-	vector<std::string>::iterator tokensiterator;
-
-	for (int i = 0; i != fileLines.size(); i++)
+	while (getline(infile, fileLine))
 	{
-		string word;
-		vector<string> tokens;
-		stringstream ss(fileLines[i]);
-		while (ss >> word) {
-			tokens.push_back(word);
-		}
-
-		for (tokensiterator = tokens.begin(); tokensiterator != tokens.end(); tokensiterator++)
+		string name;
+		stringstream ss(fileLine);
+		ss >> name;
+		if (name.compare("Vertex") == 0)
 		{
-			if ((*tokensiterator).compare("Vertex") == 0)
-			{
-				HE_vert* V = new HE_vert();
-
-				tokensiterator++;
-				V->vid = stoi((*tokensiterator));
-				tokensiterator++;
-				V->x = stod((*tokensiterator));
-				tokensiterator++;
-				V->y = stod((*tokensiterator));
-				tokensiterator++;
-				V->z = stod((*tokensiterator));
-				vVertex.push_back(V);
-			}
-
-			if ((*tokensiterator).compare("Face") == 0)
-			{
-				HE_face* F = new HE_face();
-
-				tokensiterator++;
-				F->fid = stoi((*tokensiterator));
-				tokensiterator++;
-				F->v1 = stoi((*tokensiterator));
-				tokensiterator++;
-				F->v2 = stoi((*tokensiterator));
-				tokensiterator++;
-				F->v3 = stoi((*tokensiterator));
-				vFaces.push_back(F);
-			}
+			HE_vert* vertex = new HE_vert();
+			ss.ignore(numeric_limits<streamsize>::max(), ' ');
+			ss >> vertex->vid >> vertex->x >> vertex->y >> vertex->z;
+			vVertex.push_back(vertex);
+		}
+		else if (name.compare("Face") == 0)
+		{
+			HE_face* face = new HE_face();
+			ss.ignore(numeric_limits<streamsize>::max(), ' ');
+			ss >> face->fid >> face->v1 >> face->v2 >> face->v3;
+			BuildFaceHalfEdgeDataStructures(face, edges);
+			CalculateFaceNormal(face);
+			vFaces.push_back(face);
 		}
 	}
+	infile.close();
+	cout << "Total vertices are - " << vVertex.size() << endl;
+	cout << "Total faces are - " << vFaces.size() << endl;
+	cout << "Total half edges are - " << edges.size() << endl;
+	cout << "Total edges are - " << edges.size() / 2 << endl;
 }
 
-char Welcome() {
-	cout << "Choose which model M file need to be opened" << endl;
-	cout << "\n" << endl;
-	cout << "B or b for bunny model" << endl;
-	cout << "C or c for cap model" << endl;
-	cout << "E or e for eight model" << endl;
-	cout << "G or g for gargoyle model" << endl;
-	cout << "K or k for knot model" << endl;
-	cout << "\n" << endl;
+void Welcome() {
 	cout << "Please use below alphabet keys for rendering model in different form" << endl;
 	cout << "\n" << endl;
 	cout << "P or p for Points" << endl;
 	cout << "W or w for wireframe" << endl;
 	cout << "F or f for FlatShading" << endl;
-	cout << "S or s for SmoothShading" << endl;
-	cin >> modelname;
-
-	return modelname;
+	cout << "S or s for SmoothShading" << endl << endl;
 }
 
 void  BuildHalfEdgeDataStructure(map<pair<int, int>, HE_edge*>& edges,
 	pair<int, int> edgekey,
+	pair<int, int> twinEdgekey,
 	pair<int, int> nextEdgeKey,
 	pair<int, int> prevEdgeKey,
 	int emantingVertexIndex,
 	int endingVertexIndex,
-	int faceIndex) {
+	HE_face* &face) {
 
-	edges[edgekey]->face = vFaces[faceIndex];
+	edges[edgekey]->face = face;
 	edges[edgekey]->vert = vVertex[(endingVertexIndex)-1];
 	edges[edgekey]->next = edges[nextEdgeKey];
 	edges[edgekey]->prev = edges[prevEdgeKey];
+	edges[edgekey]->pair = edges[twinEdgekey];
 
-	vFaces[faceIndex]->edge = edges[prevEdgeKey];
+	edges[twinEdgekey]->pair = edges[edgekey];
+
+	face->edge = edges[prevEdgeKey];
 
 	if (vVertex[(emantingVertexIndex)-1]->edge == NULL)
 	{
@@ -511,115 +445,83 @@ void  BuildHalfEdgeDataStructure(map<pair<int, int>, HE_edge*>& edges,
 	vEdges.push_back(edges[edgekey]);
 }
 
-map<pair<int, int>, HE_edge*> BuildFacesHalfEdgeDataStructure() {
+void BuildFaceHalfEdgeDataStructures(HE_face* &face, map<pair<int, int>, HE_edge*> &edges) {
 
-	map<pair<int, int>, HE_edge*> edges;
+	int faceVertex1Index = face->v1;
+	int faceVertex2Index = face->v2;
+	int faceVertex3Index = face->v3;
 
-	for (int i = 0; i != vFaces.size(); i++)
-	{
-		int faceVertex1Index = vFaces[i]->v1;
-		int faceVertex2Index = vFaces[i]->v2;
-		int faceVertex3Index = vFaces[i]->v3;
+	pair<int, int> edgekey = make_pair(faceVertex1Index, faceVertex2Index);
+	pair<int, int> twinEdgekey = make_pair(faceVertex2Index, faceVertex1Index);
+	pair<int, int> nextEdgeKey = make_pair(faceVertex2Index, faceVertex3Index);
+	pair<int, int> prevEdgeKey = make_pair(faceVertex3Index, faceVertex1Index);
+	int emantingVertexIndex = faceVertex1Index;
+	int endingVertexIndex = faceVertex2Index;
 
-		pair<int, int> edgekey = make_pair(faceVertex1Index, faceVertex2Index);
-		pair<int, int> nextEdgeKey = make_pair(faceVertex2Index, faceVertex3Index);
-		pair<int, int> prevEdgeKey = make_pair(faceVertex3Index, faceVertex1Index);
-		int emantingVertexIndex = faceVertex1Index;
-		int endingVertexIndex = faceVertex2Index;
+	edges[edgekey] = new HE_edge();
+	edges[twinEdgekey] = new HE_edge();
+	edges[nextEdgeKey] = new HE_edge();
+	edges[prevEdgeKey] = new HE_edge();
 
-		edges[edgekey] = new HE_edge();
-		edges[nextEdgeKey] = new HE_edge();
-		edges[prevEdgeKey] = new HE_edge();
+	BuildHalfEdgeDataStructure(edges, edgekey, twinEdgekey, nextEdgeKey, prevEdgeKey, emantingVertexIndex, endingVertexIndex, face);
 
-		BuildHalfEdgeDataStructure(edges, edgekey, nextEdgeKey, prevEdgeKey, emantingVertexIndex, endingVertexIndex, i);
+	edgekey = make_pair(faceVertex2Index, faceVertex3Index);
+	twinEdgekey = make_pair(faceVertex3Index, faceVertex2Index);
+	nextEdgeKey = make_pair(faceVertex3Index, faceVertex1Index);
+	prevEdgeKey = make_pair(faceVertex1Index, faceVertex2Index);
+	emantingVertexIndex = faceVertex2Index;
+	endingVertexIndex = faceVertex3Index;
 
-		edgekey = make_pair(faceVertex2Index, faceVertex3Index);
-		nextEdgeKey = make_pair(faceVertex3Index, faceVertex1Index);
-		prevEdgeKey = make_pair(faceVertex1Index, faceVertex2Index);
-		emantingVertexIndex = faceVertex2Index;
-		endingVertexIndex = faceVertex3Index;
+	edges[edgekey] = new HE_edge();
+	edges[twinEdgekey] = new HE_edge();
+	edges[nextEdgeKey] = new HE_edge();
+	edges[prevEdgeKey] = new HE_edge();
 
-		BuildHalfEdgeDataStructure(edges, edgekey, nextEdgeKey, prevEdgeKey, emantingVertexIndex, endingVertexIndex, i);
+	BuildHalfEdgeDataStructure(edges, edgekey, twinEdgekey, nextEdgeKey, prevEdgeKey, emantingVertexIndex, endingVertexIndex, face);
 
-		edgekey = make_pair(faceVertex3Index, faceVertex1Index);
-		nextEdgeKey = make_pair(faceVertex1Index, faceVertex2Index);
-		prevEdgeKey = make_pair(faceVertex2Index, faceVertex3Index);
-		emantingVertexIndex = faceVertex3Index;
-		endingVertexIndex = faceVertex1Index;
+	edgekey = make_pair(faceVertex3Index, faceVertex1Index);
+	twinEdgekey = make_pair(faceVertex1Index, faceVertex3Index);
+	nextEdgeKey = make_pair(faceVertex1Index, faceVertex2Index);
+	prevEdgeKey = make_pair(faceVertex2Index, faceVertex3Index);
+	emantingVertexIndex = faceVertex3Index;
+	endingVertexIndex = faceVertex1Index;
 
-		BuildHalfEdgeDataStructure(edges, edgekey, nextEdgeKey, prevEdgeKey, emantingVertexIndex, endingVertexIndex, i);
-	}
+	edges[edgekey] = new HE_edge();
+	edges[twinEdgekey] = new HE_edge();
+	edges[nextEdgeKey] = new HE_edge();
+	edges[prevEdgeKey] = new HE_edge();
 
-	return edges;
+	BuildHalfEdgeDataStructure(edges, edgekey, twinEdgekey, nextEdgeKey, prevEdgeKey, emantingVertexIndex, endingVertexIndex, face);
 }
 
-void BuildTwinEdgeDataStructure(map<pair<int, int>, HE_edge*>& edges) {
-	for (int i = 0; i != vFaces.size(); i++)
-	{
-		int faceVertex1Index = vFaces[i]->v1;
-		int faceVertex2Index = vFaces[i]->v2;
-		int faceVertex3Index = vFaces[i]->v3;
+void CalculateFaceNormal(HE_face* &face) {	
+	double edge[3];
+	double adjacentEdge[3];
+	double Nx, Ny, Nz, length;
 
-		pair<int, int> edgekey = make_pair(faceVertex1Index, faceVertex2Index);
-		pair<int, int> twinEdgekey = make_pair(faceVertex2Index, faceVertex1Index);
+	int faceVertex1Index = face->v1;
+	int faceVertex2Index = face->v2;
+	int faceVertex3Index = face->v3;
 
-		if (edges.count(edgekey) > 0 && edges.count(twinEdgekey) > 0)
-		{
-			edges[edgekey]->pair = edges[twinEdgekey];
-			edges[twinEdgekey]->pair = edges[edgekey];
-		}
+	edge[0] = ((vVertex[(faceVertex2Index)-1]->x) - (vVertex[(faceVertex1Index)-1]->x));
+	edge[1] = ((vVertex[(faceVertex2Index)-1]->y) - (vVertex[(faceVertex1Index)-1]->y));
+	edge[2] = ((vVertex[(faceVertex2Index)-1]->z) - (vVertex[(faceVertex1Index)-1]->z));
 
-		edgekey = make_pair(faceVertex2Index, faceVertex3Index);
-		twinEdgekey = make_pair(faceVertex3Index, faceVertex2Index);
+	adjacentEdge[0] = ((vVertex[(faceVertex3Index)-1]->x) - (vVertex[(faceVertex1Index)-1]->x));
+	adjacentEdge[1] = ((vVertex[(faceVertex3Index)-1]->y) - (vVertex[(faceVertex1Index)-1]->y));
+	adjacentEdge[2] = ((vVertex[(faceVertex3Index)-1]->z) - (vVertex[(faceVertex1Index)-1]->z));
 
-		if (edges.count(edgekey) > 0 && edges.count(twinEdgekey) > 0)
-		{
-			edges[edgekey]->pair = edges[twinEdgekey];
-			edges[twinEdgekey]->pair = edges[edgekey];
-		}
+	Nx = (((edge[1]) * (adjacentEdge[2])) - ((edge[2]) * (adjacentEdge[1])));
+	Ny = (((edge[2]) * (adjacentEdge[0])) - ((edge[0]) * (adjacentEdge[2])));
+	Nz = (((edge[0]) * (adjacentEdge[1])) - ((edge[1]) * (adjacentEdge[0])));
 
-		edgekey = make_pair(faceVertex3Index, faceVertex1Index);
-		twinEdgekey = make_pair(faceVertex1Index, faceVertex3Index);
+	length = sqrt(((Nx) * (Nx)) + ((Ny) * (Ny)) + ((Nz) * (Nz)));
 
-		if (edges.count(edgekey) > 0 && edges.count(twinEdgekey) > 0)
-		{
-			edges[edgekey]->pair = edges[twinEdgekey];
-			edges[twinEdgekey]->pair = edges[edgekey];
-		}
-	}
-}
+	face->Area = ((length) / 2);
 
-void CalculateFaceNormal() {
-	for (int i = 0; i != vFaces.size(); i++)
-	{
-		double edge[3];
-		double adjacentEdge[3];
-		double Nx, Ny, Nz, length;
-
-		int faceVertex1Index = vFaces[i]->v1;
-		int faceVertex2Index = vFaces[i]->v2;
-		int faceVertex3Index = vFaces[i]->v3;
-
-		edge[0] = ((vVertex[(faceVertex2Index)-1]->x) - (vVertex[(faceVertex1Index)-1]->x));
-		edge[1] = ((vVertex[(faceVertex2Index)-1]->y) - (vVertex[(faceVertex1Index)-1]->y));
-		edge[2] = ((vVertex[(faceVertex2Index)-1]->z) - (vVertex[(faceVertex1Index)-1]->z));
-
-		adjacentEdge[0] = ((vVertex[(faceVertex3Index)-1]->x) - (vVertex[(faceVertex1Index)-1]->x));
-		adjacentEdge[1] = ((vVertex[(faceVertex3Index)-1]->y) - (vVertex[(faceVertex1Index)-1]->y));
-		adjacentEdge[2] = ((vVertex[(faceVertex3Index)-1]->z) - (vVertex[(faceVertex1Index)-1]->z));
-
-		Nx = (((edge[1]) * (adjacentEdge[2])) - ((edge[2]) * (adjacentEdge[1])));
-		Ny = (((edge[2]) * (adjacentEdge[0])) - ((edge[0]) * (adjacentEdge[2])));
-		Nz = (((edge[0]) * (adjacentEdge[1])) - ((edge[1]) * (adjacentEdge[0])));
-
-		length = sqrt(((Nx) * (Nx)) + ((Ny) * (Ny)) + ((Nz) * (Nz)));
-
-		vFaces[i]->Area = ((length) / 2);
-
-		vFaces[i]->fnx = ((Nx) / (length));
-		vFaces[i]->fny = ((Ny) / (length));
-		vFaces[i]->fnz = ((Nz) / (length));
-	}
+	face->fnx = ((Nx) / (length));
+	face->fny = ((Ny) / (length));
+	face->fnz = ((Nz) / (length));	
 }
 
 void BuidVertexAdjacentFaceDetails() {
@@ -630,6 +532,7 @@ void BuidVertexAdjacentFaceDetails() {
 
 		vVertex[i]->Areaofadjacentindividualface.push_back(vFaces[(curr->face->fid) - 1]->Area);
 		vVertex[i]->adjacentfaceid.push_back((curr->face->fid));
+		vVertex[i]->FArea = vFaces[(curr->face->fid) - 1]->Area;
 
 		bool found = 0;
 		while (curr != NULL && curr->pair != NULL && curr->pair->next != NULL && curr->pair->next != outgoing_he)
@@ -638,6 +541,7 @@ void BuidVertexAdjacentFaceDetails() {
 			curr = curr->pair->next;
 			vVertex[i]->adjacentfaceid.push_back((curr->face->fid));
 			vVertex[i]->Areaofadjacentindividualface.push_back(vFaces[(curr->face->fid) - 1]->Area);
+			vVertex[i]->FArea += vVertex[i]->FArea + vFaces[(curr->face->fid) - 1]->Area;
 		}
 
 		if (found == 0)
@@ -647,17 +551,9 @@ void BuidVertexAdjacentFaceDetails() {
 				curr = curr->prev->pair;
 				vVertex[i]->adjacentfaceid.push_back((curr->face->fid));
 				vVertex[i]->Areaofadjacentindividualface.push_back(vFaces[(curr->face->fid) - 1]->Area);
+				vVertex[i]->FArea += vVertex[i]->FArea + vFaces[(curr->face->fid) - 1]->Area;
 			}
 		}
-
-		double temparea = 0;
-
-		for (int j = 0; j != vVertex[i]->Areaofadjacentindividualface.size(); j++)
-		{
-			temparea = temparea + vVertex[i]->Areaofadjacentindividualface[j];
-		}
-
-		vVertex[i]->FArea = temparea;
 	}
 }
 
@@ -689,19 +585,19 @@ void InitializeGlut(int argc, char** argv) {
 	glutMotionFunc(mouseMove);
 
 	glutMainLoop();
-	system("pause");
+	//system("pause");
 }
 
 int main(int argc, char** argv)
 {
-	char modelname = Welcome();
-	vector<string> fileLines = ReadSelectedModel(modelname);
-	BuildVerticesandFaces(fileLines);
-	map<pair<int, int>, HE_edge*> edges = BuildFacesHalfEdgeDataStructure();
-	BuildTwinEdgeDataStructure(edges);
-	CalculateFaceNormal();
+	Welcome();
+	auto start = chrono::high_resolution_clock::now();
+	ReadModelAndBuildVerticesandFaces();	
 	BuidVertexAdjacentFaceDetails();
 	calculateVertexNormal();
+	auto stop = chrono::high_resolution_clock::now();
+	auto duration = chrono::duration_cast<chrono::seconds>(stop - start);
+	cout << "Execution time(in seconds) duration is - " << duration.count() << endl;
 	InitializeGlut(argc, argv);
 
 	return 0;
