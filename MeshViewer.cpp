@@ -366,6 +366,7 @@ void Draw()
 
 void BuildFaceHalfEdgeDataStructures(HE_face* &face, map<pair<int, int>, HE_edge*> &edges);
 void CalculateFaceNormal(HE_face* &face);
+void BuildVerticesFaceDetails(HE_face* &face);
 
 void ReadModelAndBuildVerticesandFaces() {
 
@@ -399,6 +400,7 @@ void ReadModelAndBuildVerticesandFaces() {
 			ss >> face->fid >> face->v1 >> face->v2 >> face->v3;
 			BuildFaceHalfEdgeDataStructures(face, edges);
 			CalculateFaceNormal(face);
+			BuildVerticesFaceDetails(face);
 			vFaces.push_back(face);
 		}
 	}
@@ -524,37 +526,18 @@ void CalculateFaceNormal(HE_face* &face) {
 	face->fnz = ((Nz) / (length));	
 }
 
-void BuidVertexAdjacentFaceDetails() {
-	for (int i = 0; i != vVertex.size(); i++)
-	{
-		HE_edge* outgoing_he = vVertex[i]->edge;
-		HE_edge* curr = outgoing_he;
+void BuildVertexFaceDetail(int &vertexIndex, HE_face* &face);
 
-		vVertex[i]->Areaofadjacentindividualface.push_back(vFaces[(curr->face->fid) - 1]->Area);
-		vVertex[i]->adjacentfaceid.push_back((curr->face->fid));
-		vVertex[i]->FArea = vFaces[(curr->face->fid) - 1]->Area;
+void BuildVerticesFaceDetails(HE_face* &face) {
+	BuildVertexFaceDetail(face->v1, face);
+	BuildVertexFaceDetail(face->v2, face);
+	BuildVertexFaceDetail(face->v3, face);
+}
 
-		bool found = 0;
-		while (curr != NULL && curr->pair != NULL && curr->pair->next != NULL && curr->pair->next != outgoing_he)
-		{
-			found = 1;
-			curr = curr->pair->next;
-			vVertex[i]->adjacentfaceid.push_back((curr->face->fid));
-			vVertex[i]->Areaofadjacentindividualface.push_back(vFaces[(curr->face->fid) - 1]->Area);
-			vVertex[i]->FArea += vVertex[i]->FArea + vFaces[(curr->face->fid) - 1]->Area;
-		}
-
-		if (found == 0)
-		{
-			while (curr != NULL && curr->prev != NULL && curr->prev->pair != NULL && curr->prev->pair != outgoing_he)
-			{
-				curr = curr->prev->pair;
-				vVertex[i]->adjacentfaceid.push_back((curr->face->fid));
-				vVertex[i]->Areaofadjacentindividualface.push_back(vFaces[(curr->face->fid) - 1]->Area);
-				vVertex[i]->FArea += vVertex[i]->FArea + vFaces[(curr->face->fid) - 1]->Area;
-			}
-		}
-	}
+void BuildVertexFaceDetail(int &vertexIndex, HE_face* &face) {
+	vVertex[(vertexIndex)-1]->Areaofadjacentindividualface.push_back(face->Area);
+	vVertex[(vertexIndex)-1]->adjacentfaceid.push_back(face->fid);
+	vVertex[(vertexIndex)-1]->FArea = vVertex[(vertexIndex)-1]->FArea + face->Area;
 }
 
 void calculateVertexNormal() {
@@ -593,7 +576,6 @@ int main(int argc, char** argv)
 	Welcome();
 	auto start = chrono::high_resolution_clock::now();
 	ReadModelAndBuildVerticesandFaces();	
-	BuidVertexAdjacentFaceDetails();
 	calculateVertexNormal();
 	auto stop = chrono::high_resolution_clock::now();
 	auto duration = chrono::duration_cast<chrono::seconds>(stop - start);
